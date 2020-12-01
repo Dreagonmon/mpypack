@@ -1,0 +1,2 @@
+pyserial ~= 3.4
+mpy_cross >= 1.12
