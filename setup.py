@@ -2,10 +2,15 @@
 from setuptools import setup
 from mpypack import version
 
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
 setup(
     name="mpypack",
     version=version.FULL,
     description="A simple tool to pack up MicroPython code ",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     author="Dreagonmon",
     author_email="531486058@qq.com",
     url="https://github.com/dreagonmon/mpypack",
