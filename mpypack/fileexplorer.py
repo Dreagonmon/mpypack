@@ -17,8 +17,9 @@ class FileEntityType(IntEnum):
 
 FILE_SIZE_UNKNOWN = -1
 class FileEntity:
-    def __init__(self, abs_dir:PurePosixPath=PurePosixPath("/") , name:str="", type:FileEntityType=FileEntityType.FILE, size=FILE_SIZE_UNKNOWN):
-        fullpath = abs_dir.joinpath(name)
+    def __init__(self, abs_dir=PurePosixPath("/") , name:str="", type:FileEntityType=FileEntityType.FILE, size=FILE_SIZE_UNKNOWN):
+        abs_dir = convert_to_posixpath(abs_dir)
+        fullpath = abs_dir.joinpath(str(name))
         filedir = PurePosixPath(*fullpath.parts[:-1])
         filename = fullpath.parts[-1]
         if filename == "/":
@@ -40,6 +41,8 @@ class FileEntity:
         return False
     def __hash__(self) -> int:
         return hash((self.abspath, self.type))
+    def __str__(self):
+        return str(self.abspath)
     def __repr__(self):
         return self.print()
     def print(self):
@@ -121,6 +124,15 @@ class FileExplorer:
     def _release_device(self):
         self.__device_lock.release()
 
+    def __enter__(self):
+        self.__device_lock.acquire()
+        self.init()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        self.close()
+        self.__device_lock.release()
+
     @property
     def status(self):
         if self.__status == FileExplorerStatus.READY:
@@ -135,33 +147,29 @@ class FileExplorer:
     def is_ready(self):
         return self.__status == FileExplorerStatus.READY
 
+    @__protect
     def init(self):
-        self.__device_lock.acquire()
+        if self.is_ready:
+            return
+        self.__device.init()
         try:
-            if self.is_ready:
-                return
-            self.__device.init()
-            try:
-                self.__device.enter_raw_repl()
-            except PyboardError:
-                sleep(0.5)
-                self.__device.enter_raw_repl() # try again
-            self.__device.exec("try:\n    import uos\nexcept ImportError:\n    import os as uos\nimport sys")
-            self.__device.exec("try:\n    import ubinascii\nexcept ImportError:\n    import binascii as ubinascii")
-            self.__current_path = PurePosixPath("/", self.__device.eval("uos.getcwd()").decode("utf8"))
-            self.sysname = self.__device.eval("uos.uname()[0]").decode("utf-8")
-            self.__status = FileExplorerStatus.READY
-        finally:
-            self.__device_lock.release()
+            self.__device.enter_raw_repl()
+        except PyboardError:
+            sleep(0.5)
+            self.__device.enter_raw_repl() # try again
+        self.__device.exec("try:\n    import uos\nexcept ImportError:\n    import os as uos\nimport sys")
+        self.__device.exec("try:\n    import ubinascii\nexcept ImportError:\n    import binascii as ubinascii")
+        self.__current_path = PurePosixPath("/", self.__device.eval("uos.getcwd()").decode("utf8"))
+        self.sysname = self.__device.eval("uos.uname()[0]").decode("utf-8")
+        self.__status = FileExplorerStatus.READY
 
+    @__protect
     def close(self):
-        self.__device_lock.acquire()
         try: self.__device.exit_raw_repl()
         except: pass
         try: self.__device.close()
         except: pass
         self.__status = FileExplorerStatus.UNKNOWN
-        self.__device_lock.release()
     
     # utils function
     def abspath(self, path:PathObject) -> PurePosixPath:
@@ -201,8 +209,9 @@ class FileExplorer:
 
     @__protect
     def exist(self, path:PathObject) -> Union[FileEntity, bool]:
+        posixpath = self.abspath(path)
         try:
-            return self.stat(path)
+            return self.stat(posixpath)
         except FileExplorerError:
             return False
 
@@ -295,7 +304,7 @@ class FileExplorer:
     @__protect
     def walk(self, path:PathObject, topdown=True) -> List[FileEntity]:
         posixpath = self.abspath(path)
-        dir = self.exist(path)
+        dir = self.exist(posixpath)
         if dir == False or dir.type != FileEntityType.DIRECTORY:
             raise FileExplorerError("Target is not directory: {}".format(posixpath))
         lst = []

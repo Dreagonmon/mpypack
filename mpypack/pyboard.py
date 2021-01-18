@@ -58,7 +58,7 @@ class PyboardError(Exception):
 class Pyboard:
     def __init__(self, device, baudrate=115200, wait=0):
         self.device = device
-        self.baudrate = baudrate
+        self.baudrate = int(baudrate)
         self.wait = wait
         self.serial = None
 

@@ -9,7 +9,7 @@ setup(
     author="Dreagonmon",
     author_email="531486058@qq.com",
     url="https://github.com/dreagonmon/mpypack",
-    install_requires=["pyserial", "mpy_cross"],
+    install_requires=["pyserial", "mpy_cross", "click"],
     packages=['mpypack'],
     keywords=["micropython", "file transfer", "development"],
     classifiers=[

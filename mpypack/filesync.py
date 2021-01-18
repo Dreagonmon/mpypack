@@ -1,40 +1,68 @@
 try:
-    from fileexplorer import FileExplorer, FileEntity, FileEntityType, PathObject, convert_to_pathstr, FILE_SIZE_UNKNOWN, FileExplorerStatus
+    import mpycross
+    from fileexplorer import FileExplorer, FileEntity, FileEntityType, PathObject, convert_to_pathstr, FILE_SIZE_UNKNOWN, FileExplorerStatus, ProgressCallback
 except ImportError:
-    from mpypack.fileexplorer import FileExplorer, FileEntity, FileEntityType, PathObject, convert_to_pathstr, FILE_SIZE_UNKNOWN, FileExplorerStatus
+    from mpypack import mpycross
+    from mpypack.fileexplorer import FileExplorer, FileEntity, FileEntityType, PathObject, convert_to_pathstr, FILE_SIZE_UNKNOWN, FileExplorerStatus, ProgressCallback
 from pathlib import PurePath, PurePosixPath
-from os import walk, remove, PathLike, path as syspath
+from os import walk, remove, PathLike, path as syspath, makedirs
 from tempfile import gettempdir
-import re, json, hashlib, mpy_cross, uuid
 from typing import Callable, Union
-import tempfile
+from shutil import rmtree
+import re, json, hashlib, uuid, tempfile
 
 PATTERN_PY = re.compile(r'\.py$', re.IGNORECASE)
-PATTERN_IGNORED = [
+PATTERN_COMPILE_IGNORED = [
     re.compile(r'^/?main\.py$', re.IGNORECASE),
     re.compile(r'^/?boot\.py$', re.IGNORECASE),
 ]
-SyncProgressCallback = Union[None, Callable[[int, int, str, str],None]]
+PATTERN_INCLUDE = [
+]
+PATTERN_EXCLUDE = [
+    re.compile(r'/?__pycache__/?', re.IGNORECASE),
+]
+SyncProgressCallback = Union[None, Callable[[int, int, int, int, str, str],None]]
+
+def get_compiled_file_content(source:PathLike):
+    tmppath = PurePath(tempfile.gettempdir()).joinpath(str(uuid.uuid4())+".mpy")
+    mpycross.run("-o", tmppath, source).wait()
+    with open(tmppath, "rb") as f:
+        data = f.read()
+    remove(tmppath)
+    return data
 
 class FileSync():
-    def __init__(self, file_explorer, local_path=".", remote_path="/", remote_record_file="/.mpypack_sha256.json", compile_ignore_pattern=PATTERN_IGNORED):
+    def __init__(self, file_explorer, local_path=".", remote_path="/", remote_record_file="/.mpypack_sha256.json", compile_ignore_pattern=PATTERN_COMPILE_IGNORED, include_pattern=PATTERN_INCLUDE, exclude_pattern=PATTERN_EXCLUDE):
         self.__fe:FileExplorer = file_explorer
         self.__local = PurePath(syspath.abspath(local_path))
         self.__remote = PurePosixPath(remote_path)
         self.__record_file_path = PurePosixPath(remote_record_file)
         self.__pattern_compile_ignored = compile_ignore_pattern
+        self.__pattern_include = include_pattern
+        self.__pattern_exclude = exclude_pattern
     
     def should_compile(self, path:PathObject):
         if isinstance(path, FileEntity):
             if path.type == FileEntityType.DIRECTORY:
                 return False
-            pathstr = path.name
-        else:
-            pathstr = convert_to_pathstr(path)
+        pathstr = convert_to_pathstr(path)
         for ptn in self.__pattern_compile_ignored:
             if len(ptn.findall(pathstr)) > 0:
                 return False
         return len(PATTERN_PY.findall(pathstr)) > 0
+
+    def should_include(self, path:PathObject, ignore_hidden=True):
+        pathstr = convert_to_pathstr(path)
+        for ptn in self.__pattern_include:
+            if len(ptn.findall(pathstr)) > 0:
+                return True
+        for ptn in self.__pattern_exclude:
+            if len(ptn.findall(pathstr)) > 0:
+                return False
+        for p in PurePath(pathstr).parts:
+            if ignore_hidden and p.startswith(".") and p != ".":
+                return False # ignore hidden file
+        return True
 
     def get_local_path(self, path:PathObject):
         pth = PurePosixPath(convert_to_pathstr(path)).relative_to(self.__remote)
@@ -47,19 +75,16 @@ class FileSync():
     def __walk_local_like_remote(self, ignore_hidden=True):
         lst = []
         for cur_dir, _, files in walk(self.__local):
-            for p in PurePath(cur_dir).parts:
-                if not ignore_hidden:
-                    break
-                if p.startswith(".") and p != ".":
-                    break # ignore hidden dir
-            else:
-                pth = self.get_remote_path(cur_dir)
-                lst.append(FileEntity(pth, "", FileEntityType.DIRECTORY, FILE_SIZE_UNKNOWN))
-                for f in files:
-                    if ignore_hidden and f.startswith("."):
-                        continue # ignore hidden file
-                    size = syspath.getsize(syspath.join(cur_dir, f))
-                    lst.append(FileEntity(pth, f, FileEntityType.FILE, size))
+            dir_pth = FileEntity(self.get_remote_path(cur_dir), "", FileEntityType.DIRECTORY, FILE_SIZE_UNKNOWN)
+            if not self.should_include(dir_pth, ignore_hidden):
+                continue # ignore hidden dir
+            lst.append(dir_pth)
+            for f in files:
+                size = syspath.getsize(syspath.join(cur_dir, f))
+                file_pth = FileEntity(dir_pth, f, FileEntityType.FILE, size)
+                if not self.should_include(file_pth, ignore_hidden):
+                    continue # ignore hidden file
+                lst.append(file_pth)
         return lst
 
     def __walk_remote(self):
@@ -74,22 +99,18 @@ class FileSync():
                 hash.update(b'compile')
             return hash.hexdigest()
 
-    def __upload_file(self, local_file:PathLike, remote_file:PathObject=None, compile=False):
+    def __upload_file(self, local_file:PathLike, remote_file:PathObject=None, compile=False, progress_callback:ProgressCallback=None):
         lol = convert_to_pathstr(local_file)
         if remote_file == None:
             remote_file = self.get_remote_path(local_file)
         rmt = convert_to_pathstr(remote_file)
         if compile and self.should_compile(lol) and self.should_compile(rmt):
-            tmppath = PurePath(tempfile.gettempdir()).joinpath(str(uuid.uuid4())+".mpy")
-            mpy_cross.run("-o", tmppath, lol).wait()
-            with open(tmppath, "rb") as f:
-                data = f.read()
-            remove(tmppath)
+            data = get_compiled_file_content(lol)
             rmt = PATTERN_PY.sub(".mpy", rmt)
         else:
             with open(lol, "rb") as f:
                 data = f.read()
-        self.__fe.upload(rmt, data)
+        self.__fe.upload(rmt, data, progress_callback=progress_callback)
 
     def sync_dir_remote_with_local(self, compile=False, ignore_hidden=True, upload_only_modified=True, delete_exist_file=True, progress_callback:SyncProgressCallback=None):
         self.__fe._require_device()
@@ -115,16 +136,22 @@ class FileSync():
                 else:
                     local_files_compiled.update([f])
             remote_files = set(self.__walk_remote())
-            # get must upload file
+            # get files need delete
             exist_files = remote_files - local_files_compiled # file to delete
             try:
                 f = self.__fe.stat(self.__record_file_path)
                 exist_files.discard(f)
             except: pass
+            for f in exist_files.copy():
+                if not self.should_include(f):
+                    exist_files.discard(f)
+            # get must upload file
             need_upload_files = []
+            dir_count = 0
             for local_file in local_files:
                 if local_file.type == FileEntityType.DIRECTORY:
                     need_upload_files.append(local_file)
+                    dir_count += 1
                     continue
                 hash = self.__hash_local_file(local_file, compile)
                 key = convert_to_pathstr(local_file)
@@ -132,23 +159,25 @@ class FileSync():
                 if not (key in file_record and file_record[key] == hash) or (not upload_only_modified):
                     need_upload_files.append(local_file)
             # start upload
-            total = len(need_upload_files)
+            total = len(need_upload_files) - dir_count
             if delete_exist_file:
                 total += len(exist_files)
             finished = 0
             if delete_exist_file:
                 for f in exist_files:
                     if progress_callback != None:
-                        progress_callback(finished, total, "delete", str(f.abspath.relative_to(self.__remote)))
+                        progress_callback(finished, total, 0, 0, "delete", str(f.abspath.relative_to(self.__remote)))
                     self.__fe.rmtree(f)
                     finished += 1
             for f in need_upload_files:
-                if progress_callback != None:
-                    progress_callback(finished, total, "upload", str(f.abspath.relative_to(self.__remote)))
+                def upload_progress_callback(sub_p, sub_t):
+                    if progress_callback != None:
+                        progress_callback(finished, total, sub_p, sub_t, "upload", str(f.abspath.relative_to(self.__remote)))
                 if f.type == FileEntityType.DIRECTORY:
                     self.__fe.mkdirs(f)
+                    continue # dir not count
                 else:
-                    self.__upload_file(self.get_local_path(f), f, compile)
+                    self.__upload_file(self.get_local_path(f), f, compile, progress_callback=upload_progress_callback)
                 finished += 1
             # write record
             self.__fe.upload(self.__record_file_path, json.dumps(new_file_record).encode("utf-8"))
@@ -156,3 +185,28 @@ class FileSync():
             if need_close:
                 self.__fe.close()
             self.__fe._release_device()
+    
+    def build(self, compile=False, ignore_hidden=True, target_folder:PathLike=".build", progress_callback:SyncProgressCallback=None):
+        local_files = set(self.__walk_local_like_remote(ignore_hidden))
+        target_folder = syspath.abspath(target_folder)
+        if syspath.exists(target_folder):
+            rmtree(target_folder)
+        makedirs(target_folder)
+        for f in local_files:
+            if f.type == FileEntityType.DIRECTORY:
+                continue
+            if progress_callback != None:
+                progress_callback(0, 0, 0, 0, "build", str(f.abspath.relative_to(self.__remote)))
+            localpath = self.get_local_path(f)
+            target = syspath.join(target_folder, PurePath(localpath).relative_to(self.__local))
+            folder = syspath.dirname(target)
+            if not syspath.exists(folder):
+                makedirs(folder)
+            if compile and self.should_compile(f):
+                data = get_compiled_file_content(localpath)
+                target = PATTERN_PY.sub(".mpy", target)
+            else:
+                with open(localpath, 'rb') as f:
+                    data = f.read()
+            with open(target, 'wb') as f:
+                f.write(data)
