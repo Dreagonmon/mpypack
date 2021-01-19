@@ -305,9 +305,11 @@ class FileExplorer:
     def walk(self, path:PathObject, topdown=True) -> List[FileEntity]:
         posixpath = self.abspath(path)
         dir = self.exist(posixpath)
-        if dir == False or dir.type != FileEntityType.DIRECTORY:
-            raise FileExplorerError("Target is not directory: {}".format(posixpath))
         lst = []
+        if dir.type != FileEntityType.DIRECTORY:
+            raise FileExplorerError("Target is not directory: {}".format(posixpath))
+        if dir == False:
+            return lst
         files = self.ls(dir)
         if topdown:
             lst.append(dir)
