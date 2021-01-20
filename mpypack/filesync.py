@@ -17,9 +17,12 @@ PATTERN_COMPILE_IGNORED = [
     re.compile(r'^/?boot\.py$', re.IGNORECASE),
 ]
 PATTERN_INCLUDE = [
+    re.compile(r'\.mpypack_sha256.json$', re.IGNORECASE),
 ]
 PATTERN_EXCLUDE = [
     re.compile(r'/?__pycache__/?', re.IGNORECASE),
+    re.compile(r'\.pyc$', re.IGNORECASE),
+    re.compile(r'\.pyi$', re.IGNORECASE),
 ]
 SyncProgressCallback = Union[None, Callable[[int, int, int, int, str, str],None]]
 
@@ -32,11 +35,11 @@ def get_compiled_file_content(source:PathLike):
     return data
 
 class FileSync():
-    def __init__(self, file_explorer, local_path=".", remote_path="/", remote_record_file="/.mpypack_sha256.json", compile_ignore_pattern=PATTERN_COMPILE_IGNORED, include_pattern=PATTERN_INCLUDE, exclude_pattern=PATTERN_EXCLUDE):
+    def __init__(self, file_explorer, local_path=".", remote_path="/", remote_record_file=".mpypack_sha256.json", compile_ignore_pattern=PATTERN_COMPILE_IGNORED, include_pattern=PATTERN_INCLUDE, exclude_pattern=PATTERN_EXCLUDE):
         self.__fe:FileExplorer = file_explorer
         self.__local = PurePath(syspath.abspath(local_path))
         self.__remote = PurePosixPath(remote_path)
-        self.__record_file_path = PurePosixPath(remote_record_file)
+        self.__record_file_path = self.__remote.joinpath(remote_record_file)
         self.__pattern_compile_ignored = compile_ignore_pattern
         self.__pattern_include = include_pattern
         self.__pattern_exclude = exclude_pattern
@@ -177,7 +180,12 @@ class FileSync():
                     self.__fe.mkdirs(f)
                     continue # dir not count
                 else:
-                    self.__upload_file(self.get_local_path(f), f, compile, progress_callback=upload_progress_callback)
+                    try:
+                        self.__upload_file(self.get_local_path(f), f, compile, progress_callback=upload_progress_callback)
+                    except:
+                        key = key = convert_to_pathstr(f)
+                        del new_file_record[key]
+                        print('Upload Error:', key)
                 finished += 1
             # write record
             self.__fe.upload(self.__record_file_path, json.dumps(new_file_record).encode("utf-8"))
