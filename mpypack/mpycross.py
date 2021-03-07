@@ -22,7 +22,10 @@ def set_mpy_cross_executable(exe_file: str):
 def run(*args, **kwargs):
     if mpy_cross_exe == None:
         raise Exception("Could not find executable mpy_cross.")
-    return subprocess.Popen([mpy_cross_exe] + list(args), **kwargs)
+    try:
+        return subprocess.Popen([mpy_cross_exe] + list(args), **kwargs)
+    except:
+        raise Exception("mpy-cross compile failed!")
 
 # find exec file
 def _find_under_dir(dir: os.PathLike):

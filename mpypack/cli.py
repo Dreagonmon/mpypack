@@ -21,6 +21,7 @@ CONFIG_FILE_SECTION = "mpypack_config"
 CONFIG_OPTION_PORT = "port"
 CONFIG_OPTION_BAUD = "baud"
 CONFIG_OPTION_COMPILE = "compile"
+CONFIG_OPTION_ARCH = "arch"
 CONFIG_OPTION_MPYCORSS = "mpycross"
 CONFIG_OPTION_LOCAL = "local"
 CONFIG_OPTION_REMOTE = "remote"
@@ -146,10 +147,13 @@ def repl():
 @click.option("-c", "--compile", "compile", default=None, type=click.BOOL, envvar=ENV_PREFIX.format("COMPILE"),
     help="Compile .py file before upload, always ignore 'main.py' and 'boot.py'. (default False)"
 )
+@click.option("-a", "--arch", "arch", default=None, type=click.STRING, envvar=ENV_PREFIX.format("ARCH"),
+    help="Set architecture for native emitter; x86, x64, armv6, armv7m, armv7em, armv7emsp, armv7emdp, xtensa, xtensawin"
+)
 @click.option("-m", "--mpycross", "mpycross", default=None, type=click.STRING, envvar=ENV_PREFIX.format("MPYCORSS"),
     help="mpy-cross exec path. Required to compile .py file. Script will search current workspace folder and mpy_cross module`s folder. If there is no mpy-cross executable, you should set it manually."
 )
-def sync(local, remote, include, exclude, hidden, compile, mpycross):
+def sync(local, remote, include, exclude, hidden, compile, arch, mpycross):
     '''
     Sync local file to mpy board.
     '''
@@ -160,11 +164,13 @@ def sync(local, remote, include, exclude, hidden, compile, mpycross):
     update_config(CONFIG_OPTION_EXCLUDE, exclude)
     update_config(CONFIG_OPTION_HIDDEN, hidden, False)
     update_config(CONFIG_OPTION_COMPILE, compile, False)
+    update_config(CONFIG_OPTION_ARCH, arch)
     update_config(CONFIG_OPTION_MPYCORSS, mpycross)
     # get config
     c_local = get_config(CONFIG_OPTION_LOCAL)
     c_remote = get_config(CONFIG_OPTION_REMOTE)
     c_compile = get_config(CONFIG_OPTION_COMPILE).lower() == "true"
+    c_arch = get_config(CONFIG_OPTION_ARCH)
     c_hidden = get_config(CONFIG_OPTION_HIDDEN).lower() == "true"
     c_include = get_config(CONFIG_OPTION_INCLUDE)
     c_include = PATTERN_INCLUDE if c_include == None else [re.compile(c_include)]
@@ -176,7 +182,7 @@ def sync(local, remote, include, exclude, hidden, compile, mpycross):
         set_mpy_cross_executable(c_mpycross)
     file_explorer = get_file_explorer()
     fs = FileSync(file_explorer, local_path=c_local, remote_path=c_remote, include_pattern=c_include, exclude_pattern=c_exclude)
-    fs.sync_dir_remote_with_local(compile=c_compile, ignore_hidden=(not c_hidden), progress_callback=print_progress)
+    fs.sync_dir_remote_with_local(compile=c_compile, arch=c_arch, ignore_hidden=(not c_hidden), progress_callback=print_progress)
     clear_console()
 
 @cli.command()
@@ -198,10 +204,13 @@ def sync(local, remote, include, exclude, hidden, compile, mpycross):
 @click.option("-c", "--compile", "compile", default=None, type=click.BOOL, envvar=ENV_PREFIX.format("COMPILE"),
     help="Compile .py file, always ignore 'main.py' and 'boot.py'. (default False)"
 )
+@click.option("-a", "--arch", "arch", default=None, type=click.STRING, envvar=ENV_PREFIX.format("ARCH"),
+    help="Set architecture for native emitter; x86, x64, armv6, armv7m, armv7em, armv7emsp, armv7emdp, xtensa, xtensawin"
+)
 @click.option("-m", "--mpycross", "mpycross", default=None, type=click.STRING, envvar=ENV_PREFIX.format("MPYCORSS"),
     help="mpy-cross exec path. Required to compile .py file. Script will search current workspace folder and mpy_cross module`s folder. If there is no mpy-cross executable, you should set it manually."
 )
-def build(source, output, include, exclude, hidden, compile, mpycross):
+def build(source, output, include, exclude, hidden, compile, arch, mpycross):
     '''
     Pack up source folder.
     Copy (and maybe compile) source file to another folder.
@@ -213,11 +222,13 @@ def build(source, output, include, exclude, hidden, compile, mpycross):
     update_config(CONFIG_OPTION_EXCLUDE, exclude)
     update_config(CONFIG_OPTION_HIDDEN, hidden, False)
     update_config(CONFIG_OPTION_COMPILE, compile, False)
+    update_config(CONFIG_OPTION_ARCH, arch)
     update_config(CONFIG_OPTION_MPYCORSS, mpycross)
     # get config
     c_source = get_config(CONFIG_OPTION_SOURCE)
     c_output = get_config(CONFIG_OPTION_OUTPUT)
     c_compile = get_config(CONFIG_OPTION_COMPILE).lower() == "true"
+    c_arch = get_config(CONFIG_OPTION_ARCH)
     c_hidden = get_config(CONFIG_OPTION_HIDDEN).lower() == "true"
     c_include = get_config(CONFIG_OPTION_INCLUDE)
     c_include = PATTERN_INCLUDE if c_include == None else [re.compile(c_include)]
@@ -228,7 +239,7 @@ def build(source, output, include, exclude, hidden, compile, mpycross):
     if c_mpycross != None:
         set_mpy_cross_executable(c_mpycross)
     fs = FileSync(None, local_path=c_source, include_pattern=c_include, exclude_pattern=c_exclude)
-    fs.build(compile=c_compile, ignore_hidden=(not c_hidden), target_folder=c_output, progress_callback=print_progress)
+    fs.build(compile=c_compile, arch=c_arch, ignore_hidden=(not c_hidden), target_folder=c_output, progress_callback=print_progress)
     clear_console()
 
 @cli.command()

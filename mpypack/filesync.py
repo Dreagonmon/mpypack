@@ -26,9 +26,12 @@ PATTERN_EXCLUDE = [
 ]
 SyncProgressCallback = Union[None, Callable[[int, int, int, int, str, str],None]]
 
-def get_compiled_file_content(source:PathLike):
+def get_compiled_file_content(source:PathLike, arch=None):
     tmppath = PurePath(tempfile.gettempdir()).joinpath(str(uuid.uuid4())+".mpy")
-    mpycross.run("-o", tmppath, source).wait()
+    if arch != None:
+        mpycross.run("-o", tmppath, "-march="+str(arch), source).wait()
+    else:
+        mpycross.run("-o", tmppath, source).wait()
     with open(tmppath, "rb") as f:
         data = f.read()
     remove(tmppath)
@@ -102,20 +105,20 @@ class FileSync():
                 hash.update(b'compile')
             return hash.hexdigest()
 
-    def __upload_file(self, local_file:PathLike, remote_file:PathObject=None, compile=False, progress_callback:ProgressCallback=None):
+    def __upload_file(self, local_file:PathLike, remote_file:PathObject=None, compile=False, arch=None, progress_callback:ProgressCallback=None):
         lol = convert_to_pathstr(local_file)
         if remote_file == None:
             remote_file = self.get_remote_path(local_file)
         rmt = convert_to_pathstr(remote_file)
         if compile and self.should_compile(lol) and self.should_compile(rmt):
-            data = get_compiled_file_content(lol)
+            data = get_compiled_file_content(lol, arch=arch)
             rmt = PATTERN_PY.sub(".mpy", rmt)
         else:
             with open(lol, "rb") as f:
                 data = f.read()
         self.__fe.upload(rmt, data, progress_callback=progress_callback)
 
-    def sync_dir_remote_with_local(self, compile=False, ignore_hidden=True, upload_only_modified=True, delete_exist_file=True, progress_callback:SyncProgressCallback=None):
+    def sync_dir_remote_with_local(self, compile=False, arch=None, ignore_hidden=True, upload_only_modified=True, delete_exist_file=True, progress_callback:SyncProgressCallback=None):
         self.__fe._require_device()
         need_close = False
         if self.__fe.status == FileExplorerStatus.UNKNOWN:
@@ -181,7 +184,7 @@ class FileSync():
                     continue # dir not count
                 else:
                     try:
-                        self.__upload_file(self.get_local_path(f), f, compile, progress_callback=upload_progress_callback)
+                        self.__upload_file(self.get_local_path(f), f, compile, arch, progress_callback=upload_progress_callback)
                     except:
                         key = key = convert_to_pathstr(f)
                         del new_file_record[key]
@@ -194,7 +197,7 @@ class FileSync():
                 self.__fe.close()
             self.__fe._release_device()
     
-    def build(self, compile=False, ignore_hidden=True, target_folder:PathLike=".build", progress_callback:SyncProgressCallback=None):
+    def build(self, compile=False, arch=None, ignore_hidden=True, target_folder:PathLike=".build", progress_callback:SyncProgressCallback=None):
         local_files = set(self.__walk_local_like_remote(ignore_hidden))
         target_folder = syspath.abspath(target_folder)
         if syspath.exists(target_folder):
@@ -211,7 +214,7 @@ class FileSync():
             if not syspath.exists(folder):
                 makedirs(folder)
             if compile and self.should_compile(f):
-                data = get_compiled_file_content(localpath)
+                data = get_compiled_file_content(localpath, arch=arch)
                 target = PATTERN_PY.sub(".mpy", target)
             else:
                 with open(localpath, 'rb') as f:

@@ -1,4 +1,4 @@
 
-FULL = "0.1.2"
+FULL = "0.1.3"
 
 MAJOR, MINOR, PATCH = FULL.split(".")

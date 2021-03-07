@@ -89,6 +89,9 @@ hidden = false
 #>>>>----compile .py to .mpy----<<<<
 compile = true
 
+#>>>>----compile arch----<<<<
+#arch = xtensawin
+
 #>>>>----mpy-cross executable path----<<<<
 # mpycross = D:\Code\Micropython\micropython\mpy-cross\mpy-cross.exe
 ```
