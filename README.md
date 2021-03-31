@@ -72,7 +72,7 @@ remote = /
 #>>>>----include path RegExp----<<<<
 # include = \.py$
 
-#>>>>----exclude path RedExp----<<<<
+#>>>>----exclude path RegExp----<<<<
 # exclude = \.pyc$
 
 #>>>>----include hidden file----<<<<
