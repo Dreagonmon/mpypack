@@ -36,17 +36,9 @@ This command line tool also use config file and environment values as parameters
 Avaliable environment values:
 ```
 MPYPACK_CONFIG: The config file path.
-
-MPYPACK_PORT
 MPYPACK_BAUD
-MPYPACK_LOCAL
-MPYPACK_REMOTE
-MPYPACK_SOURCE
-MPYPACK_OUTPUT
-MPYPACK_INCLUDE
-MPYPACK_EXCLUDE
-MPYPACK_HIDDEN
-MPYPACK_COMPILE
+MPYPACK_[UPPER_CASE_NAME_IN_CONFIG_FILE]
+...
 ```
 
 # Config File
@@ -95,3 +87,7 @@ compile = true
 #>>>>----mpy-cross executable path----<<<<
 # mpycross = D:\Code\Micropython\micropython\mpy-cross\mpy-cross.exe
 ```
+
+# Query Parameter Order
+
+cli > env > conf_file > default
