@@ -306,7 +306,7 @@ class FileExplorer:
         posixpath = self.abspath(path)
         dir = self.exist(posixpath)
         lst = []
-        if dir.type != FileEntityType.DIRECTORY:
+        if dir == False or dir.type != FileEntityType.DIRECTORY:
             raise FileExplorerError("Target is not directory: {}".format(posixpath))
         if dir == False:
             return lst
