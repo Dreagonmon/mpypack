@@ -9,7 +9,7 @@ from os import walk, remove, PathLike, path as syspath, makedirs
 from tempfile import gettempdir
 from typing import Callable, Union
 from shutil import rmtree
-import re, json, hashlib, uuid, tempfile
+import re, json, hashlib, uuid, tempfile, traceback
 
 PATTERN_PY = re.compile(r'\.py$', re.IGNORECASE)
 PATTERN_COMPILE_IGNORED = [
@@ -188,7 +188,9 @@ class FileSync():
                     except:
                         key = key = convert_to_pathstr(f)
                         del new_file_record[key]
-                        print('Upload Error:', key)
+                        print("================")
+                        traceback.print_exc()
+                        print('========> Upload Error:', key)
                 finished += 1
             # write record
             self.__fe.upload(self.__record_file_path, json.dumps(new_file_record).encode("utf-8"))
