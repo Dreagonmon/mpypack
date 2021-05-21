@@ -93,7 +93,6 @@ class FileSync():
                 #     continue # ignore hidden file
                 lst.append(file_pth)
         for f in lst.copy():
-            print(f)
             if not self.should_include(f, ignore_hidden):
                 lst.remove(f)
         return lst
@@ -216,7 +215,6 @@ class FileSync():
         makedirs(target_folder)
         new_file_record = {}
         for f in local_files:
-            print(f)
             # base info
             localpath = self.get_local_path(f)
             target = syspath.join(target_folder, PurePath(localpath).relative_to(self.__local))
