@@ -1,3 +1,4 @@
+rd /S /Q dist
 python -m pip install --upgrade build
 python -m build
 python -m pip install --user --upgrade twine

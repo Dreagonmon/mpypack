@@ -186,6 +186,9 @@ def sync(local, remote, include, exclude, hidden, compile, arch, mpycross):
     clear_console()
 
 @cli.command()
+@click.option("-r", "--remote", "remote", default=None, type=click.STRING, envvar=ENV_PREFIX.format("REMOTE"),
+    help="Remote path to sync. (default /)"
+)
 @click.option("-s", "--source", "source", default=None, type=click.STRING, envvar=ENV_PREFIX.format("SOURCE"),
     help="Local path to build. (default .)"
 )
@@ -210,12 +213,13 @@ def sync(local, remote, include, exclude, hidden, compile, arch, mpycross):
 @click.option("-m", "--mpycross", "mpycross", default=None, type=click.STRING, envvar=ENV_PREFIX.format("MPYCORSS"),
     help="mpy-cross exec path. Required to compile .py file. Script will search current workspace folder and mpy_cross module`s folder. If there is no mpy-cross executable, you should set it manually."
 )
-def build(source, output, include, exclude, hidden, compile, arch, mpycross):
+def build(remote, source, output, include, exclude, hidden, compile, arch, mpycross):
     '''
     Pack up source folder.
     Copy (and maybe compile) source file to another folder.
     '''
     # set default config
+    update_config(CONFIG_OPTION_REMOTE, remote, "/")
     update_config(CONFIG_OPTION_SOURCE, source, ".")
     update_config(CONFIG_OPTION_OUTPUT, output, ".build")
     update_config(CONFIG_OPTION_INCLUDE, include)
@@ -225,6 +229,7 @@ def build(source, output, include, exclude, hidden, compile, arch, mpycross):
     update_config(CONFIG_OPTION_ARCH, arch)
     update_config(CONFIG_OPTION_MPYCORSS, mpycross)
     # get config
+    c_remote = get_config(CONFIG_OPTION_REMOTE)
     c_source = get_config(CONFIG_OPTION_SOURCE)
     c_output = get_config(CONFIG_OPTION_OUTPUT)
     c_compile = get_config(CONFIG_OPTION_COMPILE).lower() == "true"
@@ -238,7 +243,7 @@ def build(source, output, include, exclude, hidden, compile, arch, mpycross):
     # exec
     if c_mpycross != None:
         set_mpy_cross_executable(c_mpycross)
-    fs = FileSync(None, local_path=c_source, include_pattern=c_include, exclude_pattern=c_exclude)
+    fs = FileSync(None, local_path=c_source, remote_path=c_remote, include_pattern=c_include, exclude_pattern=c_exclude)
     fs.build(compile=c_compile, arch=c_arch, ignore_hidden=(not c_hidden), target_folder=c_output, progress_callback=print_progress)
     clear_console()
 

@@ -17,12 +17,13 @@ PATTERN_COMPILE_IGNORED = [
     re.compile(r'^/?boot\.py$', re.IGNORECASE),
 ]
 PATTERN_INCLUDE = [
-    re.compile(r'\.mpypack_sha256.json$', re.IGNORECASE),
+    re.compile(r'/\.mpypack_sha256.json$', re.IGNORECASE),
 ]
 PATTERN_EXCLUDE = [
     re.compile(r'/?__pycache__/?', re.IGNORECASE),
     re.compile(r'\.pyc$', re.IGNORECASE),
     re.compile(r'\.pyi$', re.IGNORECASE),
+    re.compile(r'README.md$', re.IGNORECASE),
 ]
 SyncProgressCallback = Union[None, Callable[[int, int, int, int, str, str],None]]
 
@@ -82,19 +83,26 @@ class FileSync():
         lst = []
         for cur_dir, _, files in walk(self.__local):
             dir_pth = FileEntity(self.get_remote_path(cur_dir), "", FileEntityType.DIRECTORY, FILE_SIZE_UNKNOWN)
-            if not self.should_include(dir_pth, ignore_hidden):
-                continue # ignore hidden dir
+            # if not self.should_include(dir_pth, ignore_hidden):
+            #     continue # ignore hidden dir
             lst.append(dir_pth)
             for f in files:
                 size = syspath.getsize(syspath.join(cur_dir, f))
                 file_pth = FileEntity(dir_pth, f, FileEntityType.FILE, size)
-                if not self.should_include(file_pth, ignore_hidden):
-                    continue # ignore hidden file
+                # if not self.should_include(file_pth, ignore_hidden):
+                #     continue # ignore hidden file
                 lst.append(file_pth)
+        for f in lst.copy():
+            if not self.should_include(f, ignore_hidden):
+                lst.remove(f)
         return lst
 
-    def __walk_remote(self):
-        return self.__fe.walk(self.__remote)
+    def __walk_remote(self,  ignore_hidden=True):
+        lst = []
+        for f in self.__fe.walk(self.__remote):
+            if self.should_include(f, ignore_hidden):
+                lst.append(f)
+        return lst
     
     def __hash_local_file(self, path:PathObject, compile=False):
         pth = self.get_local_path(path)
@@ -132,6 +140,9 @@ class FileSync():
                 j = self.__fe.download(self.__record_file_path).decode("utf-8")
                 file_record = json.loads(j)
             except: pass
+            # ensure target folder exist on remote
+            if not self.__fe.exist(self.__remote):
+                self.__fe.mkdirs(self.__remote)
             # get file list
             local_files = set(self.__walk_local_like_remote(ignore_hidden))
             local_files_compiled = set()
@@ -143,14 +154,11 @@ class FileSync():
                     local_files_compiled.update([f])
             remote_files = set(self.__walk_remote())
             # get files need delete
-            exist_files = remote_files - local_files_compiled # file to delete
+            exist_should_delete_files = remote_files - local_files_compiled # file to delete
             try:
                 f = self.__fe.stat(self.__record_file_path)
-                exist_files.discard(f)
+                exist_should_delete_files.discard(f)
             except: pass
-            for f in exist_files.copy():
-                if not self.should_include(f):
-                    exist_files.discard(f)
             # get must upload file
             need_upload_files = []
             dir_count = 0
@@ -167,10 +175,10 @@ class FileSync():
             # start upload
             total = len(need_upload_files) - dir_count
             if delete_exist_file:
-                total += len(exist_files)
+                total += len(exist_should_delete_files)
             finished = 0
             if delete_exist_file:
-                for f in exist_files:
+                for f in exist_should_delete_files:
                     if progress_callback != None:
                         progress_callback(finished, total, 0, 0, "delete", str(f.abspath.relative_to(self.__remote)))
                     self.__fe.rmtree(f)
@@ -205,14 +213,23 @@ class FileSync():
         if syspath.exists(target_folder):
             rmtree(target_folder)
         makedirs(target_folder)
+        new_file_record = {}
         for f in local_files:
-            if f.type == FileEntityType.DIRECTORY:
-                continue
-            if progress_callback != None:
-                progress_callback(0, 0, 0, 0, "build", str(f.abspath.relative_to(self.__remote)))
+            # base info
             localpath = self.get_local_path(f)
             target = syspath.join(target_folder, PurePath(localpath).relative_to(self.__local))
             folder = syspath.dirname(target)
+            if f.type == FileEntityType.DIRECTORY:
+                if not syspath.exists(folder):
+                    makedirs(folder)
+                continue
+            if progress_callback != None:
+                progress_callback(0, 0, 0, 0, "build", str(f.abspath.relative_to(self.__remote)))
+            # calc hash
+            hash = self.__hash_local_file(f, compile)
+            key = convert_to_pathstr(f)
+            new_file_record[key] = hash
+            # build
             if not syspath.exists(folder):
                 makedirs(folder)
             if compile and self.should_compile(f):
@@ -223,3 +240,11 @@ class FileSync():
                     data = f.read()
             with open(target, 'wb') as f:
                 f.write(data)
+        # write hash record
+        localpath = self.get_local_path(self.__record_file_path)
+        target = syspath.join(target_folder, PurePath(localpath).relative_to(self.__local))
+        folder = syspath.dirname(target)
+        if not syspath.exists(folder):
+            makedirs(folder)
+        with open(target, "wb") as f:
+            f.write(json.dumps(new_file_record).encode("utf-8"))
