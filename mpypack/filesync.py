@@ -160,18 +160,19 @@ class FileSync():
                 exist_should_delete_files.discard(f)
             except: pass
             # get must upload file
-            need_upload_files = []
+            need_upload_files = set()
             dir_count = 0
             for local_file in local_files:
                 if local_file.type == FileEntityType.DIRECTORY:
-                    need_upload_files.append(local_file)
+                    need_upload_files.add(local_file)
                     dir_count += 1
                     continue
                 hash = self.__hash_local_file(local_file, compile)
                 key = convert_to_pathstr(local_file)
                 new_file_record[key] = hash
                 if not (key in file_record and file_record[key] == hash) or (not upload_only_modified):
-                    need_upload_files.append(local_file)
+                    exist_should_delete_files.add(local_file) # delete first, and upload
+                    need_upload_files.add(local_file)
             # start upload
             total = len(need_upload_files) - dir_count
             if delete_exist_file:
